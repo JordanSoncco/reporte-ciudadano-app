@@ -4,9 +4,10 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'crear_reporte_screen.dart';
 import 'detalle_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +20,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _incidencias = [];
   bool _isLoading = true;
+
+  // --- PALETA DE COLORES BITGLOBAL ---
+  final Color _primaryBlue = const Color(0xFF001B69); // Azul oscuro corporativo
+  final Color _bgLight = const Color(0xFFF5F7FA); // Fondo gris claro moderno
 
   // Variables para el hardware
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -40,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
     
-    // Pedir permiso en Android 13+
     await _notificationsPlugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
@@ -50,8 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _mostrarNotificacion() async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'canal_emergencia', // ID interno
-      'Alertas de Emergencia', // Nombre visible
+      'canal_emergencia',
+      'Alertas de Emergencia',
       channelDescription: 'Notificaciones al agitar el dispositivo',
       importance: Importance.max,
       priority: Priority.high,
@@ -69,18 +73,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- 2. CONFIGURACIÓN DEL ACELERÓMETRO ---
   void _iniciarAcelerometro() {
-    // Escuchamos los datos del sensor en tiempo real
     _accelerometerSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
-      // Sumamos la fuerza G en los ejes X, Y, Z
       double force = event.x.abs() + event.y.abs() + event.z.abs();
-      
-      // Si la fuerza supera los 35 (agitar fuerte)
       if (force > 35) {
         final now = DateTime.now();
-        // Un temporizador de 5 segundos para que no te inunde de notificaciones
         if (_lastShakeTime == null || now.difference(_lastShakeTime!) > const Duration(seconds: 5)) {
           _lastShakeTime = now;
-          _mostrarNotificacion(); // Disparamos la alerta
+          _mostrarNotificacion();
         }
       }
     });
@@ -108,26 +107,82 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    // Apagamos el sensor cuando se cierra la app para ahorrar batería
     _accelerometerSubscription?.cancel();
     super.dispose();
+  }
+
+  // --- WIDGET PERSONALIZADO: Píldora de Estado ---
+  Widget _buildEstadoBadge(String estado) {
+    Color bgColor;
+    Color textColor;
+
+    switch (estado.toLowerCase()) {
+      case 'resuelto':
+        bgColor = Colors.green.shade100;
+        textColor = Colors.green.shade800;
+        break;
+      case 'en proceso':
+        bgColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade800;
+        break;
+      default: // Pendiente
+        bgColor = Colors.red.shade100;
+        textColor = Colors.red.shade800;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        estado.toUpperCase(),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _bgLight,
       appBar: AppBar(
-        title: const Text('Incidencias de la Ciudad'),
-        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        title: Row(
+          mainAxisSize: MainAxisSize.min, // <-- Evita que el Row ocupe espacio extra
+          children: [
+            // --- CORRECCIÓN: Ahora busca el .png ---
+            Image.asset('assets/logobit.png', height: 35),
+            const SizedBox(width: 10),
+            // --- CORRECCIÓN: Flexible evita el desbordamiento amarillo/negro ---
+            Flexible(
+              child: Text(
+                'Incidencias',
+                style: TextStyle(
+                  color: _primaryBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.logout, color: _primaryBlue),
             onPressed: () async {
-              // Borramos el token del teléfono
               final prefs = await SharedPreferences.getInstance();
               await prefs.remove('token');
               
-              // Regresamos al Login
               if(!mounted) return;
               Navigator.pushReplacement(
                 context,
@@ -138,44 +193,103 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryBlue))
           : _incidencias.isEmpty
-              ? const Center(child: Text('No hay reportes aún. ¡Registra el primero!'))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No hay reportes aún.\n¡Sé el primero en aportar!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                )
               : ListView.builder(
+                  padding: const EdgeInsets.all(16),
                   itemCount: _incidencias.length,
                   itemBuilder: (context, index) {
                     final reporte = _incidencias[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.report_problem, color: Colors.orange),
-                        title: Text(reporte['titulo'] ?? 'Sin título', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Estado: ${reporte['estado']}'),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                        
-                        // --- AQUÍ ESTÁ LA MAGIA DE LA SINCRONIZACIÓN ---
-                        onTap: () async {
-                          // Esperamos a que el usuario regrese de la pantalla de detalles
-                          final huboCambios = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => DetalleScreen(reporte: reporte),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () async {
+                            final huboCambios = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => DetalleScreen(reporte: reporte),
+                              ),
+                            );
+                            if (huboCambios == true) {
+                              setState(() => _isLoading = true);
+                              _fetchIncidencias();
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                // Ícono estilizado corporativo
+                                Container(
+                                  height: 50,
+                                  width: 50,
+                                  decoration: BoxDecoration(
+                                    color: _primaryBlue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.location_city,
+                                    color: _primaryBlue,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        reporte['titulo'] ?? 'Sin título',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Colors.black87,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildEstadoBadge(reporte['estado'] ?? 'Pendiente'),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                              ],
                             ),
-                          );
-
-                          // Si la pantalla de detalles nos devolvió "true" (porque se editó o borró),
-                          // volvemos a descargar la lista de AWS.
-                          if (huboCambios == true) {
-                            setState(() => _isLoading = true);
-                            _fetchIncidencias();
-                          }
-                        },
-                        // -----------------------------------------------
+                          ),
+                        ),
                       ),
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final seCreoReporte = await Navigator.push(
             context,
@@ -187,8 +301,10 @@ class _HomeScreenState extends State<HomeScreen> {
             _fetchIncidencias();
           }
         },
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: _primaryBlue,
+        elevation: 4,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Reportar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }

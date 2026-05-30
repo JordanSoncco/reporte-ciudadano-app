@@ -16,13 +16,16 @@ class DetalleScreen extends StatefulWidget {
 class _DetalleScreenState extends State<DetalleScreen> {
   bool _isLoading = false;
 
+  // --- PALETA CORPORATIVA ---
+  final Color _brandBlue = const Color(0xFF001B69);
+  final Color _midnightBlue = const Color(0xFF040A22); // Azul cinemático para fondo de foto
+
   // --- FUNCIÓN PARA ABRIR GOOGLE MAPS ---
   Future<void> _abrirMapa() async {
     final lat = widget.reporte['latitud'];
     final lng = widget.reporte['longitud'];
     
-    // Inyectamos las coordenadas reales en la URL
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng?q=$lat,$lng');
     
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -31,42 +34,45 @@ class _DetalleScreenState extends State<DetalleScreen> {
     }
   }
 
-  // --- NUEVA FUNCIÓN: ELIMINAR REPORTE EN AWS ---
+  // --- FUNCIÓN: ELIMINAR REPORTE EN AWS ---
   Future<void> _eliminarReporte() async {
-    // 1. Mostramos un cuadro de diálogo de confirmación
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar Reporte'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar Reporte', style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text('¿Estás seguro de que deseas eliminar este reporte? Esta acción no se puede deshacer.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
+            child: Text('Cancelar', style: TextStyle(color: Colors.grey.shade700)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
 
-    if (confirmar != true) return; // Si el usuario cancela, salimos
+    if (confirmar != true) return;
 
     setState(() => _isLoading = true);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final idReporte = widget.reporte['id']; // Obtenemos el ID del reporte actual
+      final idReporte = widget.reporte['id'];
 
       final response = await http.delete(
         Uri.parse('http://52.15.143.102/api-backend/public/index.php/api/incidencias/$idReporte'),
         headers: {
           'Accept': 'application/json',
-          'Authorization': 'Bearer $token', // Mandamos el token de seguridad
+          'Authorization': 'Bearer $token',
         },
       );
 
@@ -75,7 +81,6 @@ class _DetalleScreenState extends State<DetalleScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reporte eliminado con éxito')),
         );
-        // Regresamos a la pantalla anterior pasándole un "true" para que sepa que debe recargar la lista
         Navigator.pop(context, true); 
       } else {
         if (!mounted) return;
@@ -102,11 +107,75 @@ class _DetalleScreenState extends State<DetalleScreen> {
       ),
     );
 
-    // Si regresamos con un 'true' (se guardó con éxito), 
-    // cerramos esta pantalla para que el HomeScreen recargue la lista
     if (seActualizo == true && mounted) {
       Navigator.pop(context, true);
     }
+  }
+
+  // --- FUNCIÓN: VISOR DE IMAGEN EN PANTALLA COMPLETA ---
+  void _verImagenCompleta(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.network(
+                url,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEstadoBadge(String estado) {
+    Color bgColor;
+    Color textColor;
+
+    switch (estado.toLowerCase()) {
+      case 'resuelto':
+        bgColor = Colors.green.shade100;
+        textColor = Colors.green.shade800;
+        break;
+      case 'en proceso':
+        bgColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade800;
+        break;
+      default:
+        bgColor = Colors.red.shade100;
+        textColor = Colors.red.shade800;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        estado.toUpperCase(),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
   }
 
   @override
@@ -116,81 +185,225 @@ class _DetalleScreenState extends State<DetalleScreen> {
         : null;
 
     return Scaffold(
+      backgroundColor: Colors.white, // El fondo principal ahora es blanco
       appBar: AppBar(
-        title: const Text('Detalle del Reporte'),
+        backgroundColor: Colors.white,
+        elevation: 0,
         centerTitle: true,
-        // --- NUEVOS BOTONES DE ACCIÓN (LÁPIZ Y BASURERO) ---
+        iconTheme: IconThemeData(color: _brandBlue),
+        title: Text(
+          'Detalle del Reporte',
+          style: TextStyle(color: _brandBlue, fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blue),
+            icon: Icon(Icons.edit_outlined, color: _brandBlue),
             onPressed: _isLoading ? null : _editarReporte,
           ),
           IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
             onPressed: _isLoading ? null : _eliminarReporte,
           ),
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator()) // Spinner mientras se elimina
+        ? Center(child: CircularProgressIndicator(color: _brandBlue)) 
         : SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (imageUrl != null)
-              Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    imageUrl,
-                    height: 250,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => 
-                        const Icon(Icons.broken_image, size: 100, color: Colors.grey),
+            child: Stack(
+              children: [
+                // --- CAPA INFERIOR: VISOR DE IMAGEN CINEMÁTICO ---
+                if (imageUrl != null)
+                  GestureDetector(
+                    onTap: () => _verImagenCompleta(imageUrl),
+                    child: Container(
+                      width: double.infinity,
+                      height: 340, // Altura fija de la zona de imagen
+                      color: _midnightBlue, // Fondo oscuro profundo
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image.network(
+                            imageUrl,
+                            fit: BoxFit.contain, // Muestra la imagen completa
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) => 
+                                const Icon(Icons.broken_image, size: 80, color: Colors.grey),
+                          ),
+                          // Botón de zoom reubicado arriba a la derecha
+                          Positioned(
+                            top: 16,
+                            right: 16,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.zoom_out_map, color: Colors.white, size: 22),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // --- CAPA SUPERIOR: TARJETA DE INFORMACIÓN DESLIZABLE ---
+                Container(
+                  // Si hay imagen, la tarjeta empieza un poco más arriba para superponerse. 
+                  // Si no hay imagen, empieza desde arriba (0).
+                  margin: EdgeInsets.only(top: imageUrl != null ? 300 : 0),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    // Borde redondeado SOLO en la parte superior para dar efecto de panel inferior
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    boxShadow: [
+                      if (imageUrl != null) // Sombra solo si está superponiéndose a la imagen
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 20,
+                          offset: const Offset(0, -5),
+                        ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Pequeña "pestaña" visual (indicador decorativo de arrastre)
+                      if (imageUrl != null)
+                        Center(
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 24),
+                            width: 40,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+
+                      Text(
+                        widget.reporte['titulo'] ?? 'Sin título', 
+                        style: TextStyle(
+                          fontSize: 24, 
+                          fontWeight: FontWeight.w800,
+                          color: _brandBlue,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildEstadoBadge(widget.reporte['estado'] ?? 'Pendiente'),
+                      
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Divider(),
+                      ),
+                      
+                      Row(
+                        children: [
+                          Icon(Icons.description_outlined, color: _brandBlue, size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Descripción del suceso', 
+                            style: TextStyle(
+                              fontSize: 18, 
+                              fontWeight: FontWeight.bold, 
+                              color: Colors.grey.shade800
+                            )
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        widget.reporte['descripcion'] ?? 'Sin descripción', 
+                        style: const TextStyle(fontSize: 16, color: Colors.black87, height: 1.5)
+                      ),
+                      
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Divider(),
+                      ),
+                      
+                      Row(
+                        children: [
+                          Icon(Icons.location_on_outlined, color: _brandBlue, size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ubicación Satelital', 
+                            style: TextStyle(
+                              fontSize: 18, 
+                              fontWeight: FontWeight.bold, 
+                              color: Colors.grey.shade800
+                            )
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Column(
+                              children: [
+                                Text('Latitud', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Text('${widget.reporte['latitud']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            Container(height: 30, width: 1, color: Colors.grey.shade300),
+                            Column(
+                              children: [
+                                Text('Longitud', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Text('${widget.reporte['longitud']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      
+                      // --- BOTÓN DE MAPA ESTILIZADO ---
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            backgroundColor: const Color(0xFF0F9D58), // Verde Google Maps
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: _abrirMapa,
+                          icon: const Icon(Icons.map, color: Colors.white),
+                          label: const Text(
+                            'VER EN EL MAPA', 
+                            style: TextStyle(
+                              color: Colors.white, 
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            )
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20), // Margen extra al fondo
+                    ],
                   ),
                 ),
-              ),
-            const SizedBox(height: 24),
-            
-            Text(
-              widget.reporte['titulo'] ?? 'Sin título', 
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)
+              ],
             ),
-            const SizedBox(height: 8),
-            Chip(
-              label: Text(widget.reporte['estado'] ?? 'Pendiente'),
-              backgroundColor: Colors.orange.shade100,
-              labelStyle: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
-            ),
-            const Divider(height: 32),
-            
-            const Text('Descripción:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
-            const SizedBox(height: 8),
-            Text(widget.reporte['descripcion'] ?? 'Sin descripción', style: const TextStyle(fontSize: 16)),
-            const Divider(height: 32),
-            
-            const Text('Ubicación Satelital:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
-            const SizedBox(height: 8),
-            Text('Latitud: ${widget.reporte['latitud']}\nLongitud: ${widget.reporte['longitud']}'),
-            const SizedBox(height: 24),
-            
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Colors.green,
-                ),
-                onPressed: _abrirMapa,
-                icon: const Icon(Icons.map, color: Colors.white),
-                label: const Text('VER EN GOOGLE MAPS', style: TextStyle(color: Colors.white, fontSize: 16)),
-              ),
-            )
-          ],
-        ),
-      ),
+          ),
     );
   }
 }
