@@ -73,9 +73,11 @@ class _DetalleScreenState extends State<DetalleScreen> {
         headers: {
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
+          'X-Authorization': 'Bearer $token', // <-- ¡EL DISFRAZ VIP PARA APACHE!
         },
       );
 
+      // Aceptamos tanto 200 (OK) como 204 (Sin contenido, típico de eliminaciones exitosas)
       if (response.statusCode == 200 || response.statusCode == 204) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,12 +85,14 @@ class _DetalleScreenState extends State<DetalleScreen> {
         );
         Navigator.pop(context, true); 
       } else {
+        debugPrint('Error al eliminar: ${response.statusCode} - ${response.body}');
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al eliminar el reporte')),
+          const SnackBar(content: Text('Error al eliminar el reporte en el servidor')),
         );
       }
     } catch (e) {
+      debugPrint('Error de red al eliminar: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error de conexión con el servidor')),

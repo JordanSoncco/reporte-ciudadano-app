@@ -85,11 +85,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // --- 3. CONEXIÓN A AWS ---
+  // --- CONEXIÓN A AWS (AHORA CON SEGURIDAD) ---
   Future<void> _fetchIncidencias() async {
     try {
+      // 1. Buscamos el token guardado en el celular
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      // 2. Hacemos la petición enviando el Token en los Headers
       final response = await http.get(
         Uri.parse('http://52.15.143.102/api-backend/public/index.php/api/incidencias'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+          'X-Authorization': 'Bearer $token', // <-- LA LLAVE CON DISFRAZ VIP
+        }
       );
 
       if (response.statusCode == 200) {
