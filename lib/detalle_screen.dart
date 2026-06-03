@@ -20,21 +20,26 @@ class _DetalleScreenState extends State<DetalleScreen> {
   final Color _brandBlue = const Color(0xFF001B69);
   final Color _midnightBlue = const Color(0xFF040A22); // Azul cinemático para fondo de foto
 
-  // --- FUNCIÓN PARA ABRIR GOOGLE MAPS ---
+  // --- FUNCIÓN PARA ABRIR GOOGLE MAPS (CORREGIDA Y UNIVERSAL) ---
   Future<void> _abrirMapa() async {
     final lat = widget.reporte['latitud'];
     final lng = widget.reporte['longitud'];
     
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng?q=$lat,$lng');
+    // URL Universal de Google Maps. Funciona en Android, iOS y Web perfectamente.
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint('Error al intentar abrir el mapa: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir Google Maps')),
+      );
     }
   }
 
-  // --- FUNCIÓN: ELIMINAR REPORTE EN AWS ---
+  // --- FUNCIÓN: ELIMINAR REPORTE EN AWS (CORREGIDA PARA APACHE) ---
   Future<void> _eliminarReporte() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -68,12 +73,17 @@ class _DetalleScreenState extends State<DetalleScreen> {
       final token = prefs.getString('token');
       final idReporte = widget.reporte['id'];
 
-      final response = await http.delete(
+      // Usamos POST en lugar de DELETE para saltarnos el bloqueo del servidor Apache
+      final response = await http.post(
         Uri.parse('http://52.15.143.102/api-backend/public/index.php/api/incidencias/$idReporte'),
         headers: {
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
-          'X-Authorization': 'Bearer $token', // <-- ¡EL DISFRAZ VIP PARA APACHE!
+          'X-Authorization': 'Bearer $token', // <-- ¡EL DISFRAZ VIP!
+        },
+        // El truco maestro para que Laravel lo entienda como una orden de eliminación
+        body: {
+          '_method': 'DELETE',
         },
       );
 
